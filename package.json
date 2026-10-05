@@ -1,0 +1,17 @@
+{
+  "name": "win-ble-chat",
+  "version": "1.0.0",
+  "description": "",
+  "main": "win-mesh.js",
+  "scripts": {
+    "dev": "node win-mesh.js"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "dependencies": {
+    "@nodert-win10-rs4/windows.devices.bluetooth.advertisement": "^0.4.4",
+    "@nodert-win10-rs4/windows.storage.streams": "^0.4.4",
+    "node-gyp": "^13.1.0",
+    "rebuild": "^0.1.2"
+  }
+}
