@@ -1,4 +1,4 @@
-import noble from "@stoprocent/noble";
+import noble from "@abandonware/noble";
 import bleno from "@stoprocent/bleno";
 import { prisma } from "../config/prisma";
 import { CacheService } from "../services/cache.service";
@@ -171,7 +171,7 @@ class BleMeshServices {
             // Resume scanning after 500ms broadcast window
             setTimeout(() => {
               bleno.stopAdvertising(() => {
-                noble.startScanningAsync([this.SERVICE_UUID], true);
+                noble.startScanningAsync([this.SERVICE_UUID] , true);
               });
             }, 500);
           },

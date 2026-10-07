@@ -1,4 +1,4 @@
-const noble = require("@stoprocent/noble");
+import noble from "@stoprocent/noble";
 
 noble.on("stateChange", async (state) => {
   if (state === "poweredOn") {

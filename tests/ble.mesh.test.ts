@@ -1,9 +1,9 @@
 import readline from "readline";
-import { BleMeshService } from "../src/services/ble.mesh.service";
+import { BleMeshService } from "../src/services/ble.service";
 
 
 // ========== CONFIG ==========
-const TEST_ROOM = "zigex-cohort-testroom123"; // change this if you want
+const TEST_ROOM = "cohort-123"; // change this if you want
 const MY_NAME = "Sultan"; // change to your name
 const MY_ID = "test-user-001";
 // ============================
