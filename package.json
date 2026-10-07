@@ -4,13 +4,18 @@
   "description": "",
   "main": "win-mesh.js",
   "scripts": {
-    "dev": "node win-mesh.js"
+    "dev": "node win-mesh.js",
+    "node-ble": "node node-ble.js",
+    "test": "node test2.js"
   },
   "keywords": [],
   "type": "commonjs",
   "dependencies": {
     "@nodert-win10-rs4/windows.devices.bluetooth.advertisement": "^0.4.4",
     "@nodert-win10-rs4/windows.storage.streams": "^0.4.4",
+    "@stoprocent/bleno": "^0.13.1",
+    "@stoprocent/noble": "^2.8.0",
+    "node-ble": "^1.13.0",
     "node-gyp": "^13.1.0",
     "rebuild": "^0.1.2"
   }
