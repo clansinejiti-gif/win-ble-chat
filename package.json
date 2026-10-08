@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "npx prisma generate && rm -rf dist && tsc && cp -r src/generated dist/ && echo 'BUILD SUCCESSFUL!'",
-    "test": "npx ts-node tests/ble.mesh.test.ts",
+    "test": "node dist/tests/ble.mesh.test.js",
     "start": "node ./index.js",
     "db:generate": "npx prisma generate",
     "db:push": "npx prisma db push",

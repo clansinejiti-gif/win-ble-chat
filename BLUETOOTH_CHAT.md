@@ -1,13 +1,13 @@
-# Zigex Bluetooth Mesh Chat – Agent Implementation
+# Bluetooth Mesh Chat – Agent Implementation
 
 ## Overview
 
-This document explains how to implement the Bluetooth Mesh Chat feature in the **zila-agent**.
+This document explains how to implement the a Mesh Chat feature in a **CLI Agent**.
 
-The goal is to allow interns and supervisors to chat **without internet** when they are physically close to each other.
+The goal is to allow people to chat **without internet** when they are physically close to each other.
 
-- **zila-api** → Provides room information + saves message history
-- **zila-agent** → Handles the real Bluetooth communication
+- **tests/ble.mesh.test.ts** → Provides room information + saves message history
+- **src/services/ble.mesh.chat.ts** → Handles the real Bluetooth communication
 
 ---
 

@@ -1,5 +1,5 @@
 import readline from "readline";
-import { BleMeshService } from "../src/services/ble.service";
+import { BleMeshService } from "../services/ble.service";
 
 
 // ========== CONFIG ==========
