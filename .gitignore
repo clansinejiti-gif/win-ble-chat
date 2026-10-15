@@ -4,3 +4,6 @@ test2.js
 win-mesh.js
 src/generated
 prisma
+prisma.config.ts
+src/config
+dist

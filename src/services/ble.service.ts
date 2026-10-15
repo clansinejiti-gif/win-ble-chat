@@ -1,6 +1,6 @@
 import crypto from "crypto";
-import noble from "@stoprocent/noble";
-import bleno from "@stoprocent/bleno";
+import noble from "@abandonware/noble";
+import bleno from "@abandonware/bleno";
 import { CacheService } from "./cache.service";
 
 export interface BleChatMessage {
@@ -16,12 +16,11 @@ export interface BleChatMessage {
   signature?: string;
 }
 
-export class BleMeshServices {
+export class BleMeshService {
   private readonly SERVICE_UUID = "0000fe2600001000800000805f9b34fb";
-  private readonly MANUFACTURER_ID = 0xfe26;
+  private readonly CHAR_UUID = "fe27";
   private currentRoomId: string | null = null;
-  private localSequenceCounter = 0;
-  private isSwitching = false;
+  private knownPeers = new Map<string, any>();
 
   constructor() {
     this.initializeMeshStack();
@@ -37,6 +36,7 @@ export class BleMeshServices {
   }
 
   private initializeMeshStack(): void {
+    // ========== Scanning ==========
     noble.on("stateChange", async (state: string) => {
       if (state === "poweredOn") {
         try {
@@ -54,9 +54,11 @@ export class BleMeshServices {
       this.handleIncomingDiscovery(peripheral);
     });
 
+    // ========== Advertising + GATT Server ==========
     bleno.on("stateChange", (state: string) => {
       if (state === "poweredOn" && this.currentRoomId) {
         this.startAdvertising();
+        this.setupGattServer();
       }
     });
   }
@@ -65,46 +67,70 @@ export class BleMeshServices {
     if (!this.currentRoomId) return;
 
     const name = `zigex-${this.currentRoomId.substring(0, 10)}`;
-    bleno.startAdvertising(name, [this.SERVICE_UUID], (err?: Error | null | undefined) => {
+    bleno.startAdvertising(name, [this.SERVICE_UUID], (err: Error | null | undefined) => {
       if (err) {
-        console.error("[BLE] Advertising error:", err);
+        console.error("[BLE] Advertising error:", err.message);
       } else {
         console.log(`[BLE] Advertising as: ${name}`);
       }
     });
   }
 
-  private async handleIncomingDiscovery(peripheral: any): Promise<void> {
+  private setupGattServer(): void {
+    const characteristic = new bleno.Characteristic({
+      uuid: this.CHAR_UUID,
+      properties: ["write", "writeWithoutResponse", "notify"],
+      onWriteRequest: (data: any, offset: any, withoutResponse: any, callback: any) => {
+        try {
+          this.handleIncomingMessage(data);
+          callback(bleno.Characteristic.RESULT_SUCCESS);
+        } catch (err) {
+          console.error("[BLE] Write handler error:", err);
+          callback(bleno.Characteristic.RESULT_UNLIKELY_ERROR);
+        }
+      },
+    });
+
+    const service = new bleno.PrimaryService({
+      uuid: this.SERVICE_UUID,
+      characteristics: [characteristic],
+    });
+
+    bleno.setServices([service], (err?: Error | null) => {
+      if (err) {
+        console.error("[BLE] Failed to set services:", err);
+      } else {
+        console.log("[BLE] GATT server ready");
+      }
+    });
+  }
+
+  private handleIncomingDiscovery(peripheral: any): void {
     const adv = peripheral.advertisement;
     if (!adv) return;
 
-    let buffer: Buffer | null = null;
+    const name = adv.localName || "";
+    if (!name.startsWith("zigex-")) return;
 
-    if (adv.manufacturerData && Buffer.isBuffer(adv.manufacturerData)) {
-      buffer = adv.manufacturerData;
-    } else if (adv.serviceData && adv.serviceData.length > 0) {
-      buffer = adv.serviceData[0].data;
-    }
+    if (this.knownPeers.has(peripheral.id)) return;
 
-    if (!buffer || buffer.length < 6) return;
-    if (buffer.readUInt16BE(0) !== this.MANUFACTURER_ID) return;
+    console.log(`[BLE] Discovered peer: \( {name} ( \){peripheral.id})`);
+    this.knownPeers.set(peripheral.id, peripheral);
+  }
 
-    const sequenceId = buffer.readUInt16BE(2);
-    const ttl = buffer.readUInt8(4);
+  private handleIncomingMessage(data: Buffer): void {
+    try {
+      const parsed = JSON.parse(data.toString("utf-8")) as BleChatMessage;
 
-    const cacheKey = `ble_mesh:\( {this.currentRoomId}: \){sequenceId}`;
+      if (!parsed || parsed.roomId !== this.currentRoomId) return;
 
-    // Using static methods
-    if (CacheService.get(cacheKey)) return;
-    CacheService.set(cacheKey, true, 600);
+      const cacheKey = `ble_mesh:${parsed.id}`;
+      if (CacheService.get(cacheKey)) return;
+      CacheService.set(cacheKey, true, 600);
 
-    const parsed = this.deserializePayload(buffer.subarray(6));
-    if (!parsed || parsed.roomId !== this.currentRoomId) return;
-
-    console.log(`\n[${parsed.senderName}] ${parsed.content}`);
-
-    if (ttl > 1) {
-      this.queueMeshRelay(sequenceId, ttl - 1, buffer.subarray(6));
+      console.log(`\n[${parsed.senderName}] ${parsed.content}`);
+    } catch (err) {
+      console.error("[BLE] Failed to parse incoming message:", err);
     }
   }
 
@@ -115,94 +141,101 @@ export class BleMeshServices {
       throw new Error("Call setRoomContext() first");
     }
 
-    this.localSequenceCounter = (this.localSequenceCounter + 1) % 65535;
-
     const fullMessage: BleChatMessage = {
       ...msgPayload,
       id: crypto.randomUUID(),
       timestamp: Date.now(),
     };
 
-    const header = Buffer.alloc(6);
-    header.writeUInt16BE(this.MANUFACTURER_ID, 0);
-    header.writeUInt16BE(this.localSequenceCounter, 2);
-    header.writeUInt8(5, 4);
-
-    const payload = this.serializePayload(fullMessage);
-    header.writeUInt8(payload.length, 5);
-
-    const frame = Buffer.concat([header, payload]);
-
-    // Using static methods
-    CacheService.set(
-      `ble_mesh:\( {this.currentRoomId}: \){this.localSequenceCounter}`,
-      true,
-      600
-    );
-
-    this.broadcastFrame(frame);
+    const payload = Buffer.from(JSON.stringify(fullMessage), "utf-8");
     console.log(`[You] ${fullMessage.content}`);
-  }
 
-  private queueMeshRelay(seqId: number, nextTtl: number, payload: Buffer) {
-    const header = Buffer.alloc(6);
-    header.writeUInt16BE(this.MANUFACTURER_ID, 0);
-    header.writeUInt16BE(seqId, 2);
-    header.writeUInt8(nextTtl, 4);
-    header.writeUInt8(payload.length, 5);
-
-    setTimeout(() => {
-      this.broadcastFrame(Buffer.concat([header, payload]));
-    }, Math.floor(Math.random() * 200));
-  }
-
-  private broadcastFrame(frame: Buffer): void {
-    if (this.isSwitching) return;
-    this.isSwitching = true;
-
-    noble.stopScanning(() => {
-      bleno.stopAdvertising(() => {
-        try {
-          if (typeof (bleno as any).startAdvertisingWithEIRData === "function") {
-            const flags = Buffer.from([0x02, 0x01, 0x06]);
-            (bleno as any).startAdvertisingWithEIRData(flags, frame, () => {
-              this.resumeScanning();
-            });
-          } else {
-            bleno.startAdvertising(
-              `zigex-${this.currentRoomId?.substring(0, 8)}`,
-              [this.SERVICE_UUID],
-              () => this.resumeScanning()
-            );
-          }
-        } catch (err) {
-          console.error("[BLE] Broadcast error:", err);
-          this.isSwitching = false;
-        }
-      });
-    });
-  }
-
-  private resumeScanning() {
-    setTimeout(() => {
-      bleno.stopAdvertising(() => {
-        noble.startScanning([this.SERVICE_UUID], true, () => {
-          this.isSwitching = false;
-        });
-      });
-    }, 400);
-  }
-
-  private serializePayload(message: BleChatMessage): Buffer {
-    return Buffer.from(JSON.stringify(message), "utf-8");
-  }
-
-  private deserializePayload(buffer: Buffer): BleChatMessage | null {
-    try {
-      return JSON.parse(buffer.toString("utf-8")) as BleChatMessage;
-    } catch {
-      return null;
+    for (const [, peripheral] of this.knownPeers) {
+      this.sendToPeer(peripheral, payload);
     }
   }
+
+  private sendToPeer(peripheral: any, payload: Buffer): void {
+  if ((peripheral as any)._isBusy) {
+    console.log(`[BLE] Peer ${peripheral.id} is busy, skipping`);
+    return;
+  }
+
+  (peripheral as any)._isBusy = true;
+  console.log(`[BLE] Connecting to ${peripheral.id}...`);
+
+  // Safety: force unlock after 8 seconds no matter what
+  const busyTimer = setTimeout(() => {
+    (peripheral as any)._isBusy = false;
+    console.log(`[BLE] Force-unlocked busy flag for ${peripheral.id}`);
+  }, 3000);
+
+  const cleanup = () => {
+    clearTimeout(busyTimer);
+    (peripheral as any)._isBusy = false;
+    setTimeout(() => this.startAdvertising(), 700);
+  };
+
+  if (peripheral.state === "connected") {
+    peripheral.disconnect(() => {
+      setTimeout(() => this.doConnectAndWrite(peripheral, payload, cleanup), 500);
+    });
+    return;
+  }
+
+  this.doConnectAndWrite(peripheral, payload, cleanup);
 }
-export const BleMeshService = new BleMeshServices();
+
+private doConnectAndWrite(
+  peripheral: any,
+  payload: Buffer,
+  cleanup: () => void
+): void {
+  bleno.stopAdvertising(() => {
+    peripheral.connect((err: any) => {
+      if (err) {
+        console.error(`[BLE] Connect failed:`, err.message);
+        cleanup();
+        return;
+      }
+
+      console.log(`[BLE] Connected to ${peripheral.id}`);
+
+      setTimeout(() => {
+        peripheral.discoverAllServicesAndCharacteristics(
+          (error: any, _services: any[], characteristics: any[]) => {
+            if (error) {
+              console.error("[BLE] Discover error:", error.message);
+              peripheral.disconnect(cleanup);
+              return;
+            }
+
+            const char = characteristics?.find((c: any) => {
+              const uuid = (c.uuid || "").toLowerCase().replace(/-/g, "");
+              return uuid.includes("fe27");
+            });
+
+            if (!char) {
+              console.error("[BLE] Characteristic not found");
+              console.log("Available:", characteristics?.map((c: any) => c.uuid));
+              peripheral.disconnect(cleanup);
+              return;
+            }
+
+            char.write(payload, true, (writeErr: any) => {
+              if (writeErr) {
+                console.error("[BLE] Write failed:", writeErr.message);
+              } else {
+                console.log(`[BLE] ✅ Message sent to ${peripheral.id}`);
+              }
+              peripheral.disconnect(cleanup);
+            });
+          }
+        );
+      }, 500);
+    });
+  });
+}
+}
+
+export const BleMeshServices = new BleMeshService();

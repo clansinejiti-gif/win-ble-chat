@@ -14,7 +14,7 @@ async function start() {
     console.log("\n=================================");
     console.log("  Zigex Bluetooth Mesh Tester");
     console.log("=================================\n");
-    ble_service_1.BleMeshService.setRoomContext(TEST_ROOM);
+    ble_service_1.BleMeshServices.setRoomContext(TEST_ROOM);
     console.log(`Joined room: ${TEST_ROOM}`);
     console.log("Scanning + Advertising started...\n");
     console.log("Type a message and press Enter to send.");
@@ -28,7 +28,7 @@ async function start() {
         if (!text)
             return;
         try {
-            await ble_service_1.BleMeshService.transmitMessage({
+            await ble_service_1.BleMeshServices.transmitMessage({
                 roomId: TEST_ROOM,
                 senderId: MY_ID,
                 senderName: MY_NAME,

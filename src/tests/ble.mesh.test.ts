@@ -1,5 +1,5 @@
 import readline from "readline";
-import { BleMeshService } from "../services/ble.service";
+import { BleMeshServices } from "../services/ble.service";
 
 
 // ========== CONFIG ==========
@@ -13,7 +13,7 @@ async function start() {
   console.log("  Zigex Bluetooth Mesh Tester");
   console.log("=================================\n");
 
-  BleMeshService.setRoomContext(TEST_ROOM);
+  BleMeshServices.setRoomContext(TEST_ROOM);
   console.log(`Joined room: ${TEST_ROOM}`);
   console.log("Scanning + Advertising started...\n");
   console.log("Type a message and press Enter to send.");
@@ -29,7 +29,7 @@ async function start() {
     if (!text) return;
 
     try {
-      await BleMeshService.transmitMessage({
+      await BleMeshServices.transmitMessage({
         roomId: TEST_ROOM,
         senderId: MY_ID,
         senderName: MY_NAME,
